@@ -1,91 +1,46 @@
-@Library("Shared_lib@main") _
 pipeline {
-    
     agent any
-    environment{
-        SONAR_HOME = tool "Sonar"
+    
+    environment {
+        SONARQUBE = "Sonar"     // Jenkins SonarQube tool name
+        DOCKER_USER = "madhupdevops"
+        APP_NAME = "node-app"
+        APP_VERSION = "v2"
     }
     
     stages {
 
-        stage("Clean WorkSpace"){
-            steps{
+        stage("Clean Workspace") {
+            steps {
                 echo "Cleaning Jenkins Workspace..."
                 cleanWs()
             }
         }
-        
-        stage("Git: Code Checkout"){
-            steps{
-                script{
-                    echo "Onboarding code..."
-                    code_checkout()
-                }
+
+        stage("Git: Code Checkout") {
+            steps {
+                echo "Onboarding code..."
+                git branch: 'main', url: 'https://github.com/dexter73710/TWS.git'
             }
         }
-        stage("SonarQube: Analysis"){
-            steps{
-               script{
-                   echo "Analyzing Code..."
-                   sonarqube_analysis("Sonar")
-               }
-            }
-        }
-        stage("SonarQube: Quality Gates"){
-            steps{
-               script{
-                   echo "Checking code Quality..."
-                   sonarqube_code_quality()
-               }
-            }
-        }
-        stage("OWASP: Dependency Check"){
-            steps{
-                script{
-                    echo "Checking dependency..."
-                    owasp_dependency()
-                }
-            }
-        }
-        stage("Docker: Build"){
-            steps{
-                script{
-                    echo "Building code..."
-                    docker_build("node-app","v2","madhupdevops")
-                }
-            }
-        }
-        stage("Trivy: filesystem scan"){
-            steps{
-                script{
-                    echo "Scanning file system..."
-                    trivy_scan()
-                }
-            }
-        }
-        stage("Docker: Push to remote dockerhub"){
-            steps{
-                script{
-                    echo "Pushing to DockerHub..."
-                    docker_push("node-app","v2","madhupdevops")
+
+        stage("SonarQube: Analysis") {
+            steps {
+                withSonarQubeEnv("${SONARQUBE}") {
+                    sh """
+                        sonar-scanner \
+                          -Dsonar.projectKey=${APP_NAME} \
+                          -Dsonar.sources=. \
+                          -Dsonar.host.url=$SONAR_HOST_URL \
+                          -Dsonar.login=$SONAR_AUTH_TOKEN
+                    """
                 }
             }
         }
 
-        stage("Docker: Cleaning Artifacts"){
-            steps{
-                script{
-                    echo "Cleaning Artifacts..."
-                    docker_cleanup("node-app","v2","madhupdevops")
+        stage("SonarQube: Quality Gates") {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
-        }
-        stage("Docker-Compose: Deploy code"){
-            steps{
-                script{
-                    docker_compose()
-                }
-            }
-        }
-    }
-}
